@@ -1,9 +1,20 @@
 import os
 import time
+from endpoints import Endpoints
+from typing import TypeVar, Type
+from pydantic import BaseModel
 import requests
 from dotenv import load_dotenv
 from endpoints import Endpoints
+import json
+import apiSchemas
+from utils import print_types
+from apiSchemas import OrderToJSONRequest
 
+
+
+Req = TypeVar("Req", bound=BaseModel)
+Res = TypeVar("Res", bound=BaseModel)
 
 class ZohoCreatorClient:
     """
@@ -91,11 +102,51 @@ class ZohoCreatorClient:
             return {"error": "Request failed", "details": str(e)}
         except ValueError:
             return {"error": "Invalid JSON response", "details": response.text}
+        
+
+    def call_typed(
+    self,
+    endpoint: Endpoints,
+    request: Req,
+    method: str = "POST"
+) -> Res:
+        # Get the expected request/response models
+        req_model, res_model = apiSchemas.endpoint_schemas[endpoint]
+
+        # Validate request type
+        if not isinstance(request, req_model):
+            raise TypeError(f"Expected {req_model.__name__}, got {type(request).__name__}")
+
+        # Prepare request payload
+        payload_or_params = request.model_dump()
+        params = payload_or_params if method.upper() == "GET" else None
+        payload = payload_or_params if method.upper() == "POST" else None
+
+        # Call the generic API
+        result = self.call_function(str(endpoint), method=method, params=params, payload=payload)
+
+        # Check for error dicts returned by call_function
+        if "error" in result:
+            print("🔴 Zoho API Error Details:")
+            for k, v in result.items():
+                print(f"{k}: {v}")
+            raise RuntimeError(f"Zoho API Error: {result['error']}")
+
+        # Parse response into typed model (Pydantic v2)
+        return res_model.model_validate(result)
 
 
 if __name__ == "__main__":
     client = ZohoCreatorClient()
 
-    print("👉 Calling HelloWorld_TEST...")
-    result = client.call_function(Endpoints.HELLO_WORLD_TEST, params={"name": "John"})
-    print("✅ Response:", result)
+    req = OrderToJSONRequest(orderID=3541189000008268029)
+
+    res: apiSchemas.OrderToJSONResponse = client.call_typed(
+        endpoint=Endpoints.ORDER_TO_JSON,
+        request=req,
+        method="GET"
+    )
+
+    print(res.result)
+    print("\n\n\n")
+    print(print_types(res.result))

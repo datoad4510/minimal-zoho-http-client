@@ -4,6 +4,7 @@ import argparse
 from dotenv import load_dotenv
 
 # usage: python get_zoho_tokens.py <auth_code>
+# this is a one time usage script! for getting the refresh token
 
 def get_zoho_tokens(auth_code: str):
     """Exchanges an authorization code for access and refresh tokens."""
